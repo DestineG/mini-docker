@@ -2,3 +2,6 @@ vendor/
 third_party/
 
 exp/cgroups/memory/
+exp/unionfs/aufs/mnt/
+exp/unionfs/aufs/container-layer/*
+!exp/unionfs/aufs/container-layer/*.txt

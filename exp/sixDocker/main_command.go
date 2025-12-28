@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
 
 	log "github.com/sirupsen/logrus"
@@ -15,10 +16,24 @@ var runCommand = cli.Command{
 	Usage: `Create a container with namespace and cgroup limit
 			mydocker run -it [command]`,
 	// cli选项定义 选项参数以 - 或者 -- 开头
+	// boolFlag: 不出现则为false 出现则为true
+	// stringFlag: 不出现则为默认值 出现则为其后跟的字符串值
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "ti",
 			Usage: "enable tty",
+		},
+		cli.StringFlag{
+			Name:  "m",
+			Usage: "memory limit",
+		},
+		cli.StringFlag{
+			Name:  "cpushare",
+			Usage: "cpushare limit",
+		},
+		cli.StringFlag{
+			Name:  "cpuset",
+			Usage: "cpuset limit",
 		},
 	},
 	Action: func(context *cli.Context) error {
@@ -26,9 +41,23 @@ var runCommand = cli.Command{
 			return fmt.Errorf("missing container command")
 		}
 
-		cmd := context.Args().Get(0)
+		// 获取未被flag解析的参数(命令和命令参数)
+		args := context.Args()
+		if len(args) == 0 {
+			return fmt.Errorf("missing container command")
+		}
+		var cmdArray []string
+		for _, arg := range context.Args() {
+			cmdArray = append(cmdArray, arg)
+		}
 		tty := context.Bool("ti")
-		Run(tty, cmd)
+		// 从cli上下文中获取资源限制参数
+		resConf := &subsystems.ResourceConfig{
+			CpuShare:    context.String("cpushare"),
+			CpuSet:      context.String("cpuset"),
+			MemoryLimit: context.String("m"),
+		}
+		Run(tty, resConf, cmdArray)
 		return nil
 	},
 }
@@ -38,9 +67,7 @@ var initCommand = cli.Command{
 	Usage: "Init container process run user's process in container. Do not call it outside",
 	Action: func(context *cli.Context) error {
 		log.Infof("init come on")
-		cmd := context.Args().Get(0)
-		log.Infof("init command %s", cmd)
-		err := container.RunContainerInitProcess(cmd, nil)
+		err := container.RunContainerInitProcess()
 		return err
 	},
 }

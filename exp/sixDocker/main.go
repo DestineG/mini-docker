@@ -33,7 +33,8 @@ func main() {
 		return nil
 	}
 
-	// cli运行 解析命令行参数
+	// cli运行 解析命令行参数 ./sixDocker run -ti -m 100m -- stress --vm-bytes 800m --vm-keep -m 1
+	log.Infof("main - os.Args: %v", os.Args)
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
