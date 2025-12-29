@@ -91,3 +91,29 @@ Main()
 - 切换新的文件系统不会自动挂载 /proc、/dev等目录，需要手动挂载
 - proc 作为特殊的文件系统，其内容会随着 namespace 切换
 - tmpfs 是一种基于内存的特殊文件系统，用于存放临时文件，也常被用来承载 /dev 等目录中的设备节点
+
+### 4.2 ./sixDocker run -ti /bin/sh
+
+- 在 4.1 基础上 NewParentProcess() 加入了aufs文件系统的创建
+- 在 Run() 添加了退出容器时对aufs文件系统的卸载以及 writeLayer 的清理
+
+#### tips
+
+- aufs 文件系统创建时依赖的 dirs 不能属于 unionfs，也就是说 aufs 不支持在联合文件系统上嵌套 aufs 文件系统
+
+### 4.3
+
+- 测试命令: `./sixDocker run -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume0:/tmp/v0:rw -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume1:/tmp/v1:ro -ti -- sh`
+- 添加了 volume 功能：v 参数解析 -> NewWorkSpace() 使用
+- 添加 volume 的卸载
+
+#### tips
+
+- volume 实现
+    - 创建 ufs
+    - 将宿主机目录通过 mount 挂载到 ufs 中指定目录
+- 带有 volume 的 ufs 卸载，需要先卸载 volume 才能卸载 ufs(位置: DeleteMountPoint)
+
+- COW(copy on write) 的触发机制
+    - ufs = upperdir(mount 时的dirs[0]) + lowdir(mount 时的dirs[1:])
+    - 写操作 + 目标文件位于 lowerdir

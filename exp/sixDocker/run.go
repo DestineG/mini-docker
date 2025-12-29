@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"sixDocker/cgroups"
 	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
@@ -12,10 +13,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func Run(tty bool, resConf *subsystems.ResourceConfig, command []string) {
+func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, command []string) {
 	// 准备容器的根进程 使用当前可执行文件 + init 进行启动
 	// 返回父进程对象和用于和子进程通信的管道
-	parent, writePipe := container.NewParentProcess(tty)
+	parent, writePipe := container.NewParentProcess(tty, volume)
 	if parent == nil {
 		log.Errorf("New parent process error")
 		return
@@ -48,6 +49,14 @@ func Run(tty bool, resConf *subsystems.ResourceConfig, command []string) {
 	// 子进程接收到数据后会从管道中读取命令并执行
 	sendInitCommand(command, writePipe)
 	parent.Wait()
+
+	// 容器进程退出后 清理资源
+	// 此处的 rootURL 和 mntURL 要和 NewParentProcess 中的一致
+	log.Infof("container %d exited", parent.Process.Pid)
+	rootURL := "/workspace/projects/go/dockerDev/unionfs/aufs/busybox"
+	mntURL := path.Join(rootURL, "mnt")
+	container.DeleteWorkSpace(rootURL, mntURL, volume)
+	os.Exit(0)
 }
 
 func sendInitCommand(comArray []string, writePipe *os.File) {
