@@ -80,3 +80,14 @@ Main()
      * 子进程在 `clone + exec` 后 **继承父进程的文件描述符表**
      * 因此子进程可通过 `os.NewFile(uintptr(3), ...)` 直接访问父进程传入的 pipe
      * 该方式依赖文件描述符继承，可安全跨 `exec`，常用于容器 init 进程通信
+
+### 4.1 ./sixDocker run -ti /bin/sh
+
+- 在 3.2 的基础上 NewParentProcess() 中加入了 ```cmd.Dir = "/root/busybox"```用于指定容器进程的工作目录
+- 在 RunContainerInitProcess() 中加入了 SetUpMount() 将当前容器进程的工作目录作为其根文件系统
+
+#### tips
+
+- 切换新的文件系统不会自动挂载 /proc、/dev等目录，需要手动挂载
+- proc 作为特殊的文件系统，其内容会随着 namespace 切换
+- tmpfs 是一种基于内存的特殊文件系统，用于存放临时文件，也常被用来承载 /dev 等目录中的设备节点

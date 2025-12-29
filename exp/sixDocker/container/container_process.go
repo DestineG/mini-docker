@@ -30,6 +30,8 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 	// 启动子进程后 子进程会继承父进程的文件描述符表
 	// 因此在init进程中 通过3号文件描述符就可以获取到管道的读端
 	cmd.ExtraFiles = []*os.File{readPipe}
+	// 指定容器进程的工作目录，/root/busybox 存放的是容器的根文件系统
+	cmd.Dir = "/root/busybox"
 	return cmd, writePipe
 }
 
