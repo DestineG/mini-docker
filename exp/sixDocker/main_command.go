@@ -39,6 +39,10 @@ var runCommand = cli.Command{
 			Name:  "v",
 			Usage: "volume",
 		},
+		cli.BoolFlag{
+			Name:  "d",
+			Usage: "run container in background",
+		},
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
@@ -55,6 +59,10 @@ var runCommand = cli.Command{
 			cmdArray = append(cmdArray, arg)
 		}
 		tty := context.Bool("ti")
+		d := context.Bool("d")
+		if tty && d {
+			return fmt.Errorf("ti and d paramter can not both provided")
+		}
 		// 从cli上下文中获取资源限制参数
 		resConf := &subsystems.ResourceConfig{
 			CpuShare:    context.String("cpushare"),

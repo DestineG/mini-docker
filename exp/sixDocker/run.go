@@ -48,15 +48,22 @@ func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, command 
 	log.Infof("parent writePipe %v", writePipe)
 	// 子进程接收到数据后会从管道中读取命令并执行
 	sendInitCommand(command, writePipe)
-	parent.Wait()
 
-	// 容器进程退出后 清理资源
-	// 此处的 rootURL 和 mntURL 要和 NewParentProcess 中的一致
-	log.Infof("container %d exited", parent.Process.Pid)
-	rootURL := "/workspace/projects/go/dockerDev/unionfs/aufs/busybox"
-	mntURL := path.Join(rootURL, "mnt")
-	container.DeleteWorkSpace(rootURL, mntURL, volume)
-	os.Exit(0)
+	// 此处是为了实现 -d 参数的功能
+	// -d 为真的话就不会回收资源，在当前条件下可能会导致 ufs/mnt 目录无法卸载
+	// 因为父进程退出后 子进程会被init进程收养 导致无法回收
+	// 这里简单处理为 如果是tty模式下才等待容器进程结束 并回收资源
+	if tty {
+		// 等待容器进程结束
+		parent.Wait()
+		// 容器进程退出后 清理资源
+		// 此处的 rootURL 和 mntURL 要和 NewParentProcess 中的一致
+		log.Infof("container %d exited", parent.Process.Pid)
+		rootURL := "/workspace/projects/go/dockerDev/unionfs/aufs/busybox"
+		mntURL := path.Join(rootURL, "mnt")
+		container.DeleteWorkSpace(rootURL, mntURL, volume)
+		os.Exit(0)
+	}
 }
 
 func sendInitCommand(comArray []string, writePipe *os.File) {
