@@ -190,3 +190,15 @@ func DeleteMountPointOfVolume(mntUrl string, target string) {
 		log.Errorf("Umount volume dir %s error: %v", containerURL, err)
 	}
 }
+
+// 目前仅支持保存文件系统目录为 /workspace/projects/go/dockerDev/exp/unionfs/aufs/mnt 的容器
+func CommitContainer(imageName string) {
+	rootUrl := "/workspace/projects/go/dockerDev/unionfs/aufs/busybox"
+	mntURL := path.Join(rootUrl, "mnt")
+	imageURL := path.Join(rootUrl, imageName+".tar")
+	cmd := exec.Command("tar", "-cvf", imageURL, "-C", mntURL, ".")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Errorf("Commit container failed: %v, output: %s", err, string(output))
+	}
+}

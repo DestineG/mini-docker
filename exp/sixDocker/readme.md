@@ -25,6 +25,8 @@ init            (PID = B, 容器 PID 1)
 - cli程序的 选项参数 使用cli.Flag定义，使用 -或--传递，使用context.Bool访问
 - cli程序的 位置参数 使用context.Args访问
 
+---
+
 ### 3.2 ./sixDocker run -ti -m 100m -- stress --vm-bytes 800m --vm-keep -m 1
 
 ``` bash
@@ -81,6 +83,8 @@ Main()
      * 因此子进程可通过 `os.NewFile(uintptr(3), ...)` 直接访问父进程传入的 pipe
      * 该方式依赖文件描述符继承，可安全跨 `exec`，常用于容器 init 进程通信
 
+---
+
 ### 4.1 ./sixDocker run -ti /bin/sh
 
 - 在 3.2 的基础上 NewParentProcess() 中加入了 ```cmd.Dir = "/root/busybox"```用于指定容器进程的工作目录
@@ -92,6 +96,8 @@ Main()
 - proc 作为特殊的文件系统，其内容会随着 namespace 切换
 - tmpfs 是一种基于内存的特殊文件系统，用于存放临时文件，也常被用来承载 /dev 等目录中的设备节点
 
+---
+
 ### 4.2 ./sixDocker run -ti /bin/sh
 
 - 在 4.1 基础上 NewParentProcess() 加入了aufs文件系统的创建
@@ -100,6 +106,8 @@ Main()
 #### tips
 
 - aufs 文件系统创建时依赖的 dirs 不能属于 unionfs，也就是说 aufs 不支持在联合文件系统上嵌套 aufs 文件系统
+
+---
 
 ### 4.3
 
@@ -117,3 +125,17 @@ Main()
 - COW(copy on write) 的触发机制
     - ufs = upperdir(mount 时的dirs[0]) + lowdir(mount 时的dirs[1:])
     - 写操作 + 目标文件位于 lowerdir
+
+---
+
+### 4.4
+
+- 测试命令: 
+    - `./sixDocker run -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume0:/tmp/v0:rw -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume1:/tmp/v1:ro -ti -- sh`
+    - `echo "hello commit" > /tmp/commit_test.a`
+    - `./sixDocker commit -imageName testbusyBox`
+- 添加了 commit 子命令：imageName 参数解析 -> CommitContainer() 使用
+
+#### tips
+
+- go 的 package 中的函数的可见性由函数名首字母决定，大写表示可跨包，小写表示不能跨包

@@ -76,3 +76,20 @@ var initCommand = cli.Command{
 		return err
 	},
 }
+
+var commitCommand = cli.Command{
+	Name:  "commit",
+	Usage: "Commit a container into image",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "imageName",
+			Usage: "The name or ID of the container to commit",
+		},
+	},
+	Action: func(context *cli.Context) error {
+		imageName := context.String("imageName")
+		log.Infof("commit: Image name: %s", imageName)
+		container.CommitContainer(imageName)
+		return nil
+	},
+}
