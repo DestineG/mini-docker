@@ -27,22 +27,53 @@ func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, containe
 		return
 	}
 
+	// 先生成容器ID（不依赖PID），用于日志文件路径
+	containerId := randStringBytes(10)
+	if containerName == "" {
+		containerName = containerId
+	}
+
+	// logs 实现
+	// 对parent的操作需要在start之前完成，因为start之后parent的某些属性会被锁定
+	if !tty {
+		logFileDir := fmt.Sprintf(container.DefaultInfoLocation, containerId)
+		// 先创建目录
+		if err := os.MkdirAll(logFileDir, 0755); err != nil {
+			log.Errorf("MkdirAll log file dir %s error: %v", logFileDir, err)
+			return
+		}
+		logFilePath := path.Join(logFileDir, container.ContainerLogFile)
+		logFile, err := os.Create(logFilePath)
+		if err != nil {
+			log.Errorf("Create log file %s error: %v", logFilePath, err)
+			return
+		}
+		parent.Stdout = logFile
+		parent.Stderr = logFile
+		parent.Stdin = nil
+	}
+
 	// 启动子进程 ./sixDocker
 	// 子进程会在 readUserCommand 中阻塞等待父进程通过管道发送命令(sendInitCommand(command, writePipe))
 	if err := parent.Start(); err != nil {
 		log.Error(err)
-	}
-
-	// 记录容器信息
-	containerId, err := recordContainerInfo(parent.Process.Pid, command, containerName)
-	if err != nil {
-		log.Errorf("Record container info error: %v", err)
 		return
 	}
 
+	// 记录容器信息（必须在Start()之后，因为 Process.Pid 只有在Start()后才可用）
+	if err := recordContainerInfoWithId(containerId, parent.Process.Pid, command, containerName); err != nil {
+		log.Errorf("Record container info error: %v", err)
+		return
+	}
+	log.Infof("Container Id: %s", containerId)
+
 	// 创建cgroup管理器
 	cgroupManager := cgroups.NewCgroupManager("sixDocker-cgroup")
-	defer cgroupManager.Destroy()
+	// 在非tty模式下，父进程不会等待子进程结束，在父进程执行回收时，子进程可能还没有退出，导致 cgroupManager 无法回收
+	// 因此在非tty模式下，不进行资源回收
+	if tty {
+		defer cgroupManager.Destroy()
+	}
 
 	// 设置资源限制
 	if resConf != nil {
@@ -89,14 +120,19 @@ func sendInitCommand(comArray []string, writePipe *os.File) {
 
 func recordContainerInfo(containerPID int, commandArray []string, containerName string) (string, error) {
 	id := randStringBytes(10)
+	err := recordContainerInfoWithId(id, containerPID, commandArray, containerName)
+	return id, err
+}
+
+func recordContainerInfoWithId(containerId string, containerPID int, commandArray []string, containerName string) error {
 	CreatedTime := time.Now().Format("2006-01-02 15:04:05")
 	command := strings.Join(commandArray, "")
 	if containerName == "" {
-		containerName = id
+		containerName = containerId
 	}
 	containerInfo := &container.ContainerInfo{
 		Pid:         strconv.Itoa(containerPID),
-		Id:          id,
+		Id:          containerId,
 		Command:     command,
 		CreatedTime: CreatedTime,
 		Status:      container.RUNNING,
@@ -105,19 +141,19 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName 
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {
 		log.Errorf("Record container info error: %v", err)
-		return "", err
+		return err
 	}
-	dirUrl := fmt.Sprintf(container.DefaultInfoLocation, id)
+	dirUrl := fmt.Sprintf(container.DefaultInfoLocation, containerId)
 	if err := os.MkdirAll(dirUrl, 0622); err != nil {
 		log.Errorf("MkdirAll %s error: %v", dirUrl, err)
-		return "", err
+		return err
 	}
 	fileName := path.Join(dirUrl, container.ConfigName)
 	if err := os.WriteFile(fileName, jsonBytes, 0622); err != nil {
 		log.Errorf("Write file %s error: %v", fileName, err)
-		return "", err
+		return err
 	}
-	return id, nil
+	return nil
 }
 
 func deleteContainerInfo(containerId string) {

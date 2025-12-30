@@ -11,6 +11,9 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
+
+	"github.com/olekukonko/tablewriter"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -21,6 +24,7 @@ var (
 	EXIT                string = "exited"
 	DefaultInfoLocation string = "/var/run/sixDocker/%s/"
 	ConfigName          string = "config.json"
+	ContainerLogFile    string = "container.log"
 )
 
 type ContainerInfo struct {
@@ -115,13 +119,13 @@ func CreateReadOnlyLayer(rootUrl string) {
 
 func CreateWriterLayer(rootUrl string) {
 	writerURL := path.Join(rootUrl, "writeLayer")
-	if err := os.Mkdir(writerURL, 0777); err != nil {
+	if err := os.MkdirAll(writerURL, 0777); err != nil {
 		log.Errorf("Mkdir dir %s error. %v", writerURL, err)
 	}
 }
 
 func CreateMountPoint(rootUrl string, mntUrl string) {
-	if err := os.Mkdir(mntUrl, 0777); err != nil {
+	if err := os.MkdirAll(mntUrl, 0777); err != nil {
 		log.Errorf("Mkdir dir %s error. %v", mntUrl, err)
 	}
 	dirs := "dirs=" + path.Join(rootUrl, "writeLayer") + ":" + path.Join(rootUrl, "busybox")
@@ -139,6 +143,7 @@ func DeleteWorkSpace(rootUrl string, mntUrl string, volumes []string) {
 }
 
 func DeleteMountPoint(mntUrl string, volumes []string) {
+	// 先卸载所有卷挂载点
 	for _, v := range volumes {
 		parts := strings.Split(v, ":")
 		if len(parts) < 2 {
@@ -147,12 +152,27 @@ func DeleteMountPoint(mntUrl string, volumes []string) {
 		target := parts[1]
 		DeleteMountPointOfVolume(mntUrl, target)
 	}
+	
+	// 卸载主挂载点，如果失败则尝试 lazy unmount
 	cmd := exec.Command("umount", mntUrl)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		log.Errorf("Umount %s error: %v", mntUrl, err)
+		log.Warnf("Umount %s error, trying lazy unmount: %v", mntUrl, err)
+		// 尝试 lazy unmount
+		cmd = exec.Command("umount", "-l", mntUrl)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Errorf("Lazy umount %s error: %v", mntUrl, err)
+			return // 如果卸载失败，不删除目录
+		}
 	}
+	
+	// 等待一下确保卸载完成
+	time.Sleep(100 * time.Millisecond)
+	
+	// 删除目录
 	if err := os.RemoveAll(mntUrl); err != nil {
 		log.Errorf("Remove dir %s error: %v", mntUrl, err)
 	}
@@ -208,7 +228,14 @@ func DeleteMountPointOfVolume(mntUrl string, target string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		log.Errorf("Umount volume dir %s error: %v", containerURL, err)
+		log.Warnf("Umount volume dir %s error, trying lazy unmount: %v", containerURL, err)
+		// 尝试 lazy unmount
+		cmd = exec.Command("umount", "-l", containerURL)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Errorf("Lazy umount volume dir %s error: %v", containerURL, err)
+		}
 	}
 }
 
@@ -249,10 +276,29 @@ func ListContainers() {
 		}
 		containers = append(containers, containerInfo)
 	}
-	log.Infof("List containers:")
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"ID", "Name", "PID", "Command", "CreatedTime", "Status"})
+
 	for _, container := range containers {
-		log.Infof("ID: %s, Name: %s, PID: %s, Command: %s, CreatedTime: %s, Status: %s",
-			container.Id, container.Name, container.Pid, container.Command,
-			container.CreatedTime, container.Status)
+		table.Append([]string{
+			container.Id,
+			container.Name,
+			container.Pid,
+			container.Command,
+			container.CreatedTime,
+			container.Status,
+		})
 	}
+	table.Render()
+}
+
+func LogContainer(containerId string) {
+	containerDir := fmt.Sprintf(DefaultInfoLocation, containerId)
+	logFilePath := path.Join(containerDir, ContainerLogFile)
+	content, err := ioutil.ReadFile(logFilePath)
+	if err != nil {
+		log.Errorf("Read log file %s error: %v", logFilePath, err)
+		return
+	}
+	fmt.Fprint(os.Stdout, string(content))
 }

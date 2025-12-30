@@ -115,3 +115,19 @@ var listCommand = cli.Command{
 		return nil
 	},
 }
+
+var logsCommand = cli.Command{
+	Name:  "logs",
+	Usage: "Print logs of a container",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "containerId",
+			Usage: "The ID of the container",
+		},
+	},
+	Action: func(context *cli.Context) error {
+		containerId := context.String("containerId")
+		container.LogContainer(containerId)
+		return nil
+	},
+}
