@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
 
@@ -129,5 +130,30 @@ var logsCommand = cli.Command{
 		containerId := context.String("containerId")
 		container.LogContainer(containerId)
 		return nil
+	},
+}
+
+var execCommand = cli.Command{
+	Name: "exec",
+	Usage: `Exec a command into existing container
+			mydocker exec [containerID] [command]`,
+	Action: func(context *cli.Context) error {
+		// 如果有环境变量 ENV_EXEC_PID ，说明会被 CGO 拦截就肯定不会走到这里
+		// 此处只是做一个防御
+		if os.Getenv(container.ENV_EXEC_PID) != "" {
+			return nil
+		}
+
+		if len(context.Args()) < 2 {
+			return fmt.Errorf("missing container ID or command")
+		}
+
+		containerId := context.Args().Get(0)
+		var cmdArray []string
+		for _, arg := range context.Args().Tail() {
+			cmdArray = append(cmdArray, arg)
+		}
+
+		return container.ExecContainer(containerId, cmdArray)
 	},
 }

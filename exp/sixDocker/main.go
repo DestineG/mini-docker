@@ -26,6 +26,7 @@ func main() {
 		commitCommand,
 		listCommand,
 		logsCommand,
+		execCommand,
 	}
 
 	// cli全局配置

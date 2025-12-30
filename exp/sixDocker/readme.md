@@ -162,9 +162,100 @@ Main()
 ### 5.3
 
 - 添加对 logs 子命令的支持
+- 测试命令：
+    - `./sixDocker run -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume0:/tmp/v0:rw -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume1:/tmp/v1:ro -d -name sixHelloeverybody -- top`
+    - `./sixDocker logs -containerId <容器id>`
 
 #### tips
 
 - 整理依赖树并下载 & 整理
     - `go mod tidy`
     - `go mod vendor`
+
+### 5.4 exec 子命令实现
+
+#### 是什么
+
+exec 子命令允许用户在已经运行的容器内部启动一个新的进程。它不同于 run（创建一个新容器），它的核心是在宿主机上启动一个进程，然后通过 Linux 的 setns 系统调用，“潜入”到目标容器的各个隔离命名空间（Namespace）中。
+
+明白你的意思了。我们要把**“拦截原理”**作为执行流中一个关键的“逻辑门”，展示出进程是如何在 **Go 代码运行前**被 C 代码截获并改变命运的。
+
+以下是融入了拦截机制的 **5.4 章节**完整执行流设计：
+
+---
+
+### 5.4 exec 子命令实现
+
+#### 是什么
+
+`exec` 实现的是一种“进程劫持”。它启动一个宿主机进程，利用 CGO 的特性在 Go 运行时启动前的“单线程真空期”夺取控制权，通过 `setns` 穿梭命名空间，最终在容器内执行目标命令。
+
+#### 怎么做（融入拦截机制的执行流）
+
+```bash
+阶段一：宿主机环境 (初次执行没有 env 不会执行 C 拦截逻辑 -> Go 逻辑)
+./sixDocker exec <containerId> <command>         (PID = A)
+ ├─ main() 解析 exec 子命令
+ ├─ 获取目标容器 PID (从 /var/run/sixDocker/<id>/config.json 读取)
+ └─ 设置环境变量: 
+      export sixDocker_pid=<容器PID>
+      export sixDocker_cmd=<用户命令>
+    调用 /proc/self/exe (再次启动自己) ──┐
+                                       │
+───────────────────────────────────────┼────────────────
+阶段二：时空穿梭 (C 拦截逻辑)             │
+子进程启动 (准备初始化 Go Runtime)        (PID = B) <──┘
+ ├─ [ 拦截点 ]：ELF 加载器调用 .init_array (C Constructor)
+ ├─ enter_namespace() 开始运行
+ │   ├─ getenv("sixDocker_pid") -> 命中！
+ │   ├─ 依次 open("/proc/<PID>/ns/...") 获得 5 大 Namespace 句柄
+ │   ├─ syscall.setns() -> 进程 B 的视角瞬间切换至容器内部
+ │   │    └─ 注意：此时进程依然是单线程，满足内核 setns 强制要求
+ │   ├─ system(sixDocker_cmd) -> 在容器内启动目标程序 (切换 namespace 后，会在容器内部寻找可执行文件进行执行)
+ │   └─ exit(0) -> 任务完成，直接在 C 阶段自杀
+ └─ (Go Runtime 永远没有机会在进程 B 中启动)
+
+```
+
+#### 为什么：深层拦截原理
+
+1. 使用 CGO 的根本原因 Linux 内核为了保证文件系统的安全性，严格规定：不允许在多线程环境下切换 Mount Namespace。由于 Go 语言天生就是多线程（启动即有调度器和 GC 线程），直接在 Go 代码里调用 setns 会被内核直接拒绝（报错 EINVAL）。
+
+2. 抢跑机制 (Pre-Runtime Execution) Go 的 main 函数并不是程序的第一行代码。Linux 加载二进制文件后，会先执行 CGO 产生的构造函数。此时，Go 的多线程调度器（Scheduler）还未出生。我们利用这个单线程的真空期，完成了 Namespace 的切换。
+
+3. 环境变量的“接力棒” 进程 A (Go) 无法直接通过函数参数告诉进程 B (C 阶段) 目标 PID，因为 C 构造函数运行在参数解析之前。环境变量存储在进程的栈顶，是父子进程间最原始、最直接的信息传递方式，C 代码通过 getenv 可以在任何逻辑执行前拿到它。
+
+4. 防止“逻辑污染” 为什么不让进程 B 继续跑 Go 代码？因为进程 B 此时已经进入了容器的 mnt 空间，它看到的 /lib、/etc 全是容器的（可能是 Busybox 或 Alpine）。如果让 Go Runtime 继续初始化，它会因为找不到宿主机的动态库或配置文件而崩溃。因此，exit(0) 是必须的，确保“特工”进程完成任务后立即消失，不留下任何副作用。
+
+#### 测试
+
+- 创建后台容器：`./sixDocker run -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume0:/tmp/v0:rw -v /workspace/projects/go/dockerDev/unionfs/aufs/busybox/volumes/volume1:/tmp/v1:ro -d -name sixHelloeverybody -- top`
+- 查看后台容器的id：`./sixDocker ps`
+- 进入后台容器执行命令：`./sixDocker exec <容器id> /bin/sh`
+- 查看 top 进程：`ps`
+
+
+exec 交互终端输出展示
+``` bash
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker exec 4267836795 /bin/sh
+INFO[0000] main - os.Args: [./sixDocker exec 4267836795 /bin/sh] 
+INFO[0000] container pid 172800                         
+INFO[0000] exec command /bin/sh                         
+/ # ps
+PID   USER     TIME  COMMAND
+    1 root      0:03 top
+   13 root      0:00 /bin/sh
+   14 root      0:00 ps
+/ # exit
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
+```
+
+#### tips
+
+- /proc/self/exe：这是一个神奇的符号链接，指向当前正在运行的程序本身。使用它来 re-exec 可以保证父子进程使用的是同一个二进制文件，从而确保子进程里一定带有那段 C 拦截代码，这是实现“自启动拦截”的基础
+- fd 的清理：在 C 代码中 setns 成功后，必须及时关闭打开的 /proc/[pid]/ns/* 文件描述符。如果不关闭，这些打开的句柄会泄露到容器内部的 sh 进程中，给容器留下可以直接操作宿主机 Namespace 的“后门”
+- 标准输入输出：为了支持交互（-ti），父进程 A（宿主机端）在 re-exec 启动子进程 B 时，必须通过 `cmd.Stdin = os.Stdin`、`cmd.Stdout = os.Stdout` 等方式，将当前终端的控制权透传给子进程。否则，你进入容器后将无法输入任何命令，也看不到任何输出
+- CGO Namespace 切换顺序：Mount ns 切换需要在最后，因为前面的 ns 切换需要使用宿主文件系统中 /proc 中的文件，如果提前切换 Mount ns ，可能会导致找不到正确的 `/proc/%s/ns`
+
+
+---
