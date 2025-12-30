@@ -43,6 +43,10 @@ var runCommand = cli.Command{
 			Name:  "d",
 			Usage: "run container in background",
 		},
+		cli.StringFlag{
+			Name:  "name",
+			Usage: "container name",
+		},
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
@@ -63,6 +67,7 @@ var runCommand = cli.Command{
 		if tty && d {
 			return fmt.Errorf("ti and d paramter can not both provided")
 		}
+		containerName := context.String("name")
 		// 从cli上下文中获取资源限制参数
 		resConf := &subsystems.ResourceConfig{
 			CpuShare:    context.String("cpushare"),
@@ -70,7 +75,7 @@ var runCommand = cli.Command{
 			MemoryLimit: context.String("m"),
 		}
 		volume := context.StringSlice("v")
-		Run(tty, resConf, volume, cmdArray)
+		Run(tty, resConf, volume, containerName, cmdArray)
 		return nil
 	},
 }
@@ -98,6 +103,15 @@ var commitCommand = cli.Command{
 		imageName := context.String("imageName")
 		log.Infof("commit: Image name: %s", imageName)
 		container.CommitContainer(imageName)
+		return nil
+	},
+}
+
+var listCommand = cli.Command{
+	Name:  "ps",
+	Usage: "List all the containers",
+	Action: func(context *cli.Context) error {
+		container.ListContainers()
 		return nil
 	},
 }

@@ -147,3 +147,4 @@ Main()
 #### tips
 
 - 父进程结束而其子进程还在运行时，子进程会被pid=1的进程收养
+- 卸载异常挂载点：umount -l /workspace/projects/go/dockerDev/unionfs/aufs/busybox/mnt

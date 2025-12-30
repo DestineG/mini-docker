@@ -3,6 +3,9 @@
 package container
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -11,6 +14,24 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+var (
+	RUNNING             string = "running"
+	STOPPED             string = "stopped"
+	EXIT                string = "exited"
+	DefaultInfoLocation string = "/var/run/sixDocker/%s/"
+	ConfigName          string = "config.json"
+)
+
+type ContainerInfo struct {
+	Pid         string   `json:"pid"`         // 容器init进程的pid
+	Id          string   `json:"id"`          // 容器id
+	Name        string   `json:"name"`        // 容器名称
+	Command     string   `json:"command"`     // 容器内init进程要执行的命令
+	CreatedTime string   `json:"createdTime"` // 容器创建时间
+	Status      string   `json:"status"`      // 容器状态
+	Volume      []string `json:"volume"`      // 容器挂载的卷
+}
 
 func NewParentProcess(tty bool, volume []string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
@@ -200,5 +221,38 @@ func CommitContainer(imageName string) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Errorf("Commit container failed: %v, output: %s", err, string(output))
+	}
+}
+
+// 打印正在运行的容器信息
+func ListContainers() {
+	dirURL := fmt.Sprintf(DefaultInfoLocation, "")
+	dirURL = dirURL[:len(dirURL)-1]
+	files, err := ioutil.ReadDir(dirURL)
+	if err != nil {
+		log.Errorf("Read dir %s error: %v", dirURL, err)
+		return
+	}
+	var containers []ContainerInfo
+	for _, file := range files {
+		containerDir := path.Join(dirURL, file.Name())
+		configFilePath := path.Join(containerDir, ConfigName)
+		content, err := ioutil.ReadFile(configFilePath)
+		if err != nil {
+			log.Errorf("Read file %s error: %v", configFilePath, err)
+			continue
+		}
+		var containerInfo ContainerInfo
+		if err := json.Unmarshal(content, &containerInfo); err != nil {
+			log.Errorf("Unmarshal container info error: %v", err)
+			continue
+		}
+		containers = append(containers, containerInfo)
+	}
+	log.Infof("List containers:")
+	for _, container := range containers {
+		log.Infof("ID: %s, Name: %s, PID: %s, Command: %s, CreatedTime: %s, Status: %s",
+			container.Id, container.Name, container.Pid, container.Command,
+			container.CreatedTime, container.Status)
 	}
 }

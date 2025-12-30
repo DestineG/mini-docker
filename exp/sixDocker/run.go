@@ -3,17 +3,22 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"math/rand"
 	"os"
 	"path"
 	"sixDocker/cgroups"
 	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
+	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
-func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, command []string) {
+func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, containerName string, command []string) {
 	// 准备容器的根进程 使用当前可执行文件 + init 进行启动
 	// 返回父进程对象和用于和子进程通信的管道
 	parent, writePipe := container.NewParentProcess(tty, volume)
@@ -26,6 +31,13 @@ func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, command 
 	// 子进程会在 readUserCommand 中阻塞等待父进程通过管道发送命令(sendInitCommand(command, writePipe))
 	if err := parent.Start(); err != nil {
 		log.Error(err)
+	}
+
+	// 记录容器信息
+	containerId, err := recordContainerInfo(parent.Process.Pid, command, containerName)
+	if err != nil {
+		log.Errorf("Record container info error: %v", err)
+		return
 	}
 
 	// 创建cgroup管理器
@@ -56,6 +68,8 @@ func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, command 
 	if tty {
 		// 等待容器进程结束
 		parent.Wait()
+		// 删除容器信息
+		deleteContainerInfo(containerId)
 		// 容器进程退出后 清理资源
 		// 此处的 rootURL 和 mntURL 要和 NewParentProcess 中的一致
 		log.Infof("container %d exited", parent.Process.Pid)
@@ -71,4 +85,54 @@ func sendInitCommand(comArray []string, writePipe *os.File) {
 	log.Infof("command all is %s", command)
 	writePipe.WriteString(command)
 	writePipe.Close()
+}
+
+func recordContainerInfo(containerPID int, commandArray []string, containerName string) (string, error) {
+	id := randStringBytes(10)
+	CreatedTime := time.Now().Format("2006-01-02 15:04:05")
+	command := strings.Join(commandArray, "")
+	if containerName == "" {
+		containerName = id
+	}
+	containerInfo := &container.ContainerInfo{
+		Pid:         strconv.Itoa(containerPID),
+		Id:          id,
+		Command:     command,
+		CreatedTime: CreatedTime,
+		Status:      container.RUNNING,
+		Name:        containerName,
+	}
+	jsonBytes, err := json.Marshal(containerInfo)
+	if err != nil {
+		log.Errorf("Record container info error: %v", err)
+		return "", err
+	}
+	dirUrl := fmt.Sprintf(container.DefaultInfoLocation, id)
+	if err := os.MkdirAll(dirUrl, 0622); err != nil {
+		log.Errorf("MkdirAll %s error: %v", dirUrl, err)
+		return "", err
+	}
+	fileName := path.Join(dirUrl, container.ConfigName)
+	if err := os.WriteFile(fileName, jsonBytes, 0622); err != nil {
+		log.Errorf("Write file %s error: %v", fileName, err)
+		return "", err
+	}
+	return id, nil
+}
+
+func deleteContainerInfo(containerId string) {
+	dirUrl := fmt.Sprintf(container.DefaultInfoLocation, containerId)
+	if err := os.RemoveAll(dirUrl); err != nil {
+		log.Errorf("Remove file %s error: %v", dirUrl, err)
+	}
+}
+
+func randStringBytes(n int) string {
+	const letterBytes = "0123456789"
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
 }
