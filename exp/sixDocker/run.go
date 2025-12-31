@@ -52,7 +52,7 @@ func Run(resConf *subsystems.ResourceConfig, tty bool, volume []string, containe
 	// logs 实现
 	// 对parent的操作需要在start之前完成，因为start之后parent的某些属性会被锁定
 	if !tty {
-		logFileDir := fmt.Sprintf(container.DefaultInfoLocation, containerInfo.Id)
+		logFileDir := fmt.Sprintf(container.DefaultInfoLocation, containerInfo.Name)
 		// 先创建目录
 		if err := os.MkdirAll(logFileDir, 0755); err != nil {
 			log.Errorf("MkdirAll log file dir %s error: %v", logFileDir, err)

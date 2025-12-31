@@ -263,3 +263,21 @@ root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker#
 
 - 在 run 子命令中添加了参数 e 的解析
 - exec 子命令在容器内产生的进程不知为何没有继承 init 进程(容器的根进程)的环境变量，所以在 cmd 中添加了缺失的环境变量(`ExecContainer() -> cmd.Env = finalEnv`)
+
+测试命令：
+``` bash
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker run -d -name si -e luck=bird -- top
+INFO[0000] main - os.Args: [./sixDocker run -d -name si -e luck=bird -- top] 
+INFO[0000] Creating container info for si               
+INFO[0000] Creating workspace for container si          
+INFO[0000] ReadOnlyLayer for busybox already exists at /var/run/sixDocker/readOnlyLayer/busybox 
+INFO[0000] Creating mount point at /workspace/projects/go/dockerDev/run/containers/si/mnt 
+INFO[0000] ReadOnlyLayer: /var/run/sixDocker/readOnlyLayer/busybox, WriterLayer: /workspace/projects/go/dockerDev/run/containers/si/ufs/writeLayer 
+INFO[0000] Container si PID 266843                      
+INFO[0000] parent writePipe &{0xc0000f62a0}             
+INFO[0000] command all is top                           
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker exec si env | grep bird
+INFO[0000] main - os.Args: [./sixDocker exec si env]    
+luck=bird
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
+```
