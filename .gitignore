@@ -1,6 +1,7 @@
 vendor/
 third_party/
 unionfs/
+/run
 
 exp/cgroups/memory/
 exp/unionfs/aufs/mnt/

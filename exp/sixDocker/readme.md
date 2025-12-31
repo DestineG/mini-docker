@@ -249,3 +249,12 @@ root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker#
 - 进程的 Pid 在创建时就固定下来，不会因为切换了 namespace 就改变；父进程(docker exec的go逻辑)虽然切换到了容器的 namespace ，但是其 Pid 不会随之改变，仍然属于宿主机的 pid namespace；子进程(docker exec的CGO逻辑)是在容器的 namespace 环境下创建，所以可以看到其 Pid 属于容器的 pid namespace
 
 ---
+
+### 5.7 重置
+
+#### Todo
+
+- 实现 images 子命令
+- 容器根文件系统分开管理
+- 创建容器时 保证 containerName 的唯一性
+- 命令行参数重置，将 containerId 参数换为 containerName

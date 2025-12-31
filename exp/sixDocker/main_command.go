@@ -96,15 +96,19 @@ var commitCommand = cli.Command{
 	Usage: "Commit a container into image",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  "imageName",
+			Name:  "n",
 			Usage: "The name or ID of the container to commit",
+		},
+		cli.StringFlag{
+			Name:  "t",
+			Usage: "The name of the new image",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		imageName := context.String("imageName")
-		log.Infof("commit: Image name: %s", imageName)
-		container.CommitContainer(imageName)
-		return nil
+		containerName := context.String("n")
+		imageName := context.String("t")
+		log.Infof("commit: Container name: %s, Image name: %s", containerName, imageName)
+		return container.CommitContainer(containerName, imageName)
 	},
 }
 
@@ -120,14 +124,14 @@ var listCommand = cli.Command{
 var logsCommand = cli.Command{
 	Name: "logs",
 	Usage: `Print logs of a container
-			mydocker logs [containerID]`,
+			mydocker logs [containerName]`,
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("missing container ID")
+			return fmt.Errorf("missing container name")
 		}
 
-		containerId := context.Args().Get(0)
-		container.LogContainer(containerId)
+		containerName := context.Args().Get(0)
+		container.LogContainer(containerName)
 		return nil
 	},
 }
@@ -135,7 +139,7 @@ var logsCommand = cli.Command{
 var execCommand = cli.Command{
 	Name: "exec",
 	Usage: `Exec a command into existing container
-			mydocker exec [containerID] [command]`,
+			mydocker exec [containerName] [command]`,
 	Action: func(context *cli.Context) error {
 		// 如果有环境变量 ENV_EXEC_PID ，说明会被 CGO 拦截就肯定不会走到这里
 		// 此处只是做一个防御
@@ -144,43 +148,51 @@ var execCommand = cli.Command{
 		}
 
 		if len(context.Args()) < 2 {
-			return fmt.Errorf("missing container ID or command")
+			return fmt.Errorf("missing container name or command")
 		}
 
-		containerId := context.Args().Get(0)
+		containerName := context.Args().Get(0)
 		var cmdArray []string
 		for _, arg := range context.Args().Tail() {
 			cmdArray = append(cmdArray, arg)
 		}
 
-		return container.ExecContainer(containerId, cmdArray)
+		return container.ExecContainer(containerName, cmdArray)
 	},
 }
 
 var stopCpmmand = cli.Command{
 	Name: "stop",
 	Usage: `Stop a container
-			mydocker stop [containerID]`,
+			mydocker stop [containerName]`,
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("missing container ID")
+			return fmt.Errorf("missing container containerName")
 		}
 
-		containerId := context.Args().Get(0)
-		return container.StopContainer(containerId)
+		containerName := context.Args().Get(0)
+		return container.StopContainer(containerName)
 	},
 }
 
 var removeCommand = cli.Command{
 	Name: "rm",
 	Usage: `Remove a container
-			mydocker rm [containerID]`,
+			mydocker rm [containerName]`,
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("missing container ID")
+			return fmt.Errorf("missing container name")
 		}
 
-		containerId := context.Args().Get(0)
-		return container.RemoveContainer(containerId)
+		containerName := context.Args().Get(0)
+		return container.DeleteContainer(containerName, false)
+	},
+}
+
+var ShowAllImagesCommand = cli.Command{
+	Name:  "images",
+	Usage: "List all the images",
+	Action: func(context *cli.Context) error {
+		return container.ShowAllImages()
 	},
 }

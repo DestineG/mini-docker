@@ -29,6 +29,7 @@ func main() {
 		execCommand,
 		stopCpmmand,
 		removeCommand,
+		ShowAllImagesCommand,
 	}
 
 	// cli全局配置

@@ -3,12 +3,9 @@
 package container
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
 	_ "sixDocker/nsenter"
 	"strings"
 
@@ -18,11 +15,15 @@ import (
 const ENV_EXEC_PID = "sixDocker_pid"
 const ENV_EXEC_CMD = "sixDocker_cmd"
 
-func ExecContainer(containerId string, commandArray []string) error {
+func ExecContainer(containerName string, commandArray []string) error {
 	// 获取容器PID
-	pid, err := getContainerPidById(containerId)
+	containerInfo, err := GetContainerInfoByName(containerName)
 	if err != nil {
 		return err
+	}
+	pid := containerInfo.Pid
+	if pid == "" {
+		return fmt.Errorf("cannot find container %s pid", containerName)
 	}
 
 	// 拼接命令字符串
@@ -42,24 +43,8 @@ func ExecContainer(containerId string, commandArray []string) error {
 		fmt.Sprintf("%s=%s", ENV_EXEC_CMD, cmdStr))
 
 	if err := cmd.Run(); err != nil {
-		log.Errorf("Exec container %s command %s error: %v", containerId, cmdStr, err)
+		log.Errorf("Exec container %s command %s error: %v", containerName, cmdStr, err)
 		return err
 	}
 	return nil
-}
-
-func getContainerPidById(containerId string) (string, error) {
-	dirURL := fmt.Sprintf(DefaultInfoLocation, containerId)
-	configFilePath := path.Join(dirURL, ConfigName)
-	contentBytes, err := ioutil.ReadFile(configFilePath)
-	if err != nil {
-		log.Errorf("Read file %s error: %v", configFilePath, err)
-		return "", err
-	}
-	var containerInfo ContainerInfo
-	if err := json.Unmarshal(contentBytes, &containerInfo); err != nil {
-		log.Errorf("Unmarshal container info error: %v", err)
-		return "", err
-	}
-	return containerInfo.Pid, nil
 }
