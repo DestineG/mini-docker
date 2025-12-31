@@ -118,16 +118,15 @@ var listCommand = cli.Command{
 }
 
 var logsCommand = cli.Command{
-	Name:  "logs",
-	Usage: "Print logs of a container",
-	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "containerId",
-			Usage: "The ID of the container",
-		},
-	},
+	Name: "logs",
+	Usage: `Print logs of a container
+			mydocker logs [containerID]`,
 	Action: func(context *cli.Context) error {
-		containerId := context.String("containerId")
+		if len(context.Args()) < 1 {
+			return fmt.Errorf("missing container ID")
+		}
+
+		containerId := context.Args().Get(0)
 		container.LogContainer(containerId)
 		return nil
 	},
@@ -155,5 +154,33 @@ var execCommand = cli.Command{
 		}
 
 		return container.ExecContainer(containerId, cmdArray)
+	},
+}
+
+var stopCpmmand = cli.Command{
+	Name: "stop",
+	Usage: `Stop a container
+			mydocker stop [containerID]`,
+	Action: func(context *cli.Context) error {
+		if len(context.Args()) < 1 {
+			return fmt.Errorf("missing container ID")
+		}
+
+		containerId := context.Args().Get(0)
+		return container.StopContainer(containerId)
+	},
+}
+
+var removeCommand = cli.Command{
+	Name: "rm",
+	Usage: `Remove a container
+			mydocker rm [containerID]`,
+	Action: func(context *cli.Context) error {
+		if len(context.Args()) < 1 {
+			return fmt.Errorf("missing container ID")
+		}
+
+		containerId := context.Args().Get(0)
+		return container.RemoveContainer(containerId)
 	},
 }

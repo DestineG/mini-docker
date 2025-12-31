@@ -27,6 +27,8 @@ func main() {
 		listCommand,
 		logsCommand,
 		execCommand,
+		stopCpmmand,
+		removeCommand,
 	}
 
 	// cli全局配置

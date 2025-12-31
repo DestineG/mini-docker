@@ -246,6 +246,6 @@ root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker#
 - fd 的清理：在 C 代码中 setns 成功后，必须及时关闭打开的 /proc/[pid]/ns/* 文件描述符。如果不关闭，这些打开的句柄会泄露到容器内部的 sh 进程中，给容器留下可以直接操作宿主机 Namespace 的“后门”
 - 标准输入输出：为了支持交互（-ti），父进程 A（宿主机端）在 re-exec 启动子进程 B 时，必须通过 `cmd.Stdin = os.Stdin`、`cmd.Stdout = os.Stdout` 等方式，将当前终端的控制权透传给子进程。否则，你进入容器后将无法输入任何命令，也看不到任何输出
 - CGO Namespace 切换顺序：Mount ns 切换需要在最后，因为前面的 ns 切换需要使用宿主文件系统中 /proc 中的文件，如果提前切换 Mount ns ，可能会导致找不到正确的 `/proc/%s/ns`
-
+- 进程的 Pid 在创建时就固定下来，不会因为切换了 namespace 就改变；父进程(docker exec的go逻辑)虽然切换到了容器的 namespace ，但是其 Pid 不会随之改变，仍然属于宿主机的 pid namespace；子进程(docker exec的CGO逻辑)是在容器的 namespace 环境下创建，所以可以看到其 Pid 属于容器的 pid namespace
 
 ---

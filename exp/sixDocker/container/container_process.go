@@ -152,7 +152,7 @@ func DeleteMountPoint(mntUrl string, volumes []string) {
 		target := parts[1]
 		DeleteMountPointOfVolume(mntUrl, target)
 	}
-	
+
 	// 卸载主挂载点，如果失败则尝试 lazy unmount
 	cmd := exec.Command("umount", mntUrl)
 	cmd.Stdout = os.Stdout
@@ -168,10 +168,10 @@ func DeleteMountPoint(mntUrl string, volumes []string) {
 			return // 如果卸载失败，不删除目录
 		}
 	}
-	
+
 	// 等待一下确保卸载完成
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// 删除目录
 	if err := os.RemoveAll(mntUrl); err != nil {
 		log.Errorf("Remove dir %s error: %v", mntUrl, err)
@@ -301,4 +301,63 @@ func LogContainer(containerId string) {
 		return
 	}
 	fmt.Fprint(os.Stdout, string(content))
+}
+
+func StopContainer(containerId string) error {
+	containerDir := fmt.Sprintf(DefaultInfoLocation, containerId)
+	configFilePath := path.Join(containerDir, ConfigName)
+	content, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		log.Errorf("Read file %s error: %v", configFilePath, err)
+		return err
+	}
+	var containerInfo ContainerInfo
+	if err := json.Unmarshal(content, &containerInfo); err != nil {
+		log.Errorf("Unmarshal container info error: %v", err)
+		return err
+	}
+
+	pid := containerInfo.Pid
+	cmd := exec.Command("kill", "-9", pid)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Errorf("Kill container %s failed: %v, output: %s", containerId, err, string(output))
+		return err
+	}
+
+	// 更新容器状态为 stopped
+	containerInfo.Status = STOPPED
+	updatedContent, err := json.Marshal(containerInfo)
+	if err != nil {
+		log.Errorf("Marshal updated container info error: %v", err)
+		return err
+	}
+	if err := os.WriteFile(configFilePath, updatedContent, 0622); err != nil {
+		log.Errorf("Write updated container info to file %s error: %v", configFilePath, err)
+		return err
+	}
+	return nil
+}
+
+func RemoveContainer(containerId string) error {
+	containerDir := fmt.Sprintf(DefaultInfoLocation, containerId)
+	containerConfigPath := path.Join(containerDir, ConfigName)
+	content, err := ioutil.ReadFile(containerConfigPath)
+	if err != nil {
+		log.Errorf("Read file %s error: %v", containerConfigPath, err)
+		return err
+	}
+	var containerInfo ContainerInfo
+	if err := json.Unmarshal(content, &containerInfo); err != nil {
+		log.Errorf("Unmarshal container info error: %v", err)
+		return err
+	}
+	if containerInfo.Status == RUNNING {
+		return fmt.Errorf("cannot remove a running container, please stop it first")
+	}
+	log.Infof("Removing container %s", containerId)
+	if err := os.RemoveAll(containerDir); err != nil {
+		log.Errorf("Remove container dir %s error: %v", containerDir, err)
+		return err
+	}
+	return nil
 }
