@@ -48,6 +48,10 @@ var runCommand = cli.Command{
 			Name:  "name",
 			Usage: "container name",
 		},
+		cli.StringSliceFlag{
+			Name:  "e",
+			Usage: "environment variables",
+		},
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
@@ -75,8 +79,11 @@ var runCommand = cli.Command{
 			CpuSet:      context.String("cpuset"),
 			MemoryLimit: context.String("m"),
 		}
+		// 获取 环境变量
+		envSlice := context.StringSlice("e")
+		// 获取 挂载卷
 		volume := context.StringSlice("v")
-		Run(tty, resConf, volume, containerName, cmdArray)
+		Run(resConf, tty, volume, containerName, envSlice, cmdArray)
 		return nil
 	},
 }

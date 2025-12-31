@@ -41,7 +41,7 @@ type ContainerInfo struct {
 	Volume      []string `json:"volume"`      // 容器挂载的卷
 }
 
-func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+func NewParentProcess() (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		log.Errorf("New pipe error %v", err)
@@ -52,11 +52,7 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS |
 			syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
 	}
-	if tty {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
+
 	// UNIX会在子进程启动前会将ExtraFiles中的文件描述符从3开始依次往后分配，也就是说描述符是属于父进程
 	// 启动子进程后 子进程会继承父进程的文件描述符表
 	// 因此在init进程中 通过3号文件描述符就可以获取到管道的读端

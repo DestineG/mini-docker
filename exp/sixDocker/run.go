@@ -15,14 +15,23 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func Run(tty bool, resConf *subsystems.ResourceConfig, volume []string, containerName string, command []string) {
+func Run(resConf *subsystems.ResourceConfig, tty bool, volume []string, containerName string, envSlice []string, command []string) {
 	// 准备容器的根进程 使用当前可执行文件 + init 进行启动
 	// 返回父进程对象和用于和子进程通信的管道
-	parent, writePipe := container.NewParentProcess(tty)
+	parent, writePipe := container.NewParentProcess()
 	if parent == nil {
 		log.Errorf("New parent process error")
 		return
 	}
+
+	if tty {
+		parent.Stdin = os.Stdin
+		parent.Stdout = os.Stdout
+		parent.Stderr = os.Stderr
+	}
+
+	// 设置环境变量
+	parent.Env = append(os.Environ(), envSlice...)
 
 	// 生成容器 config，pid 只能在 Start 之后才能获取到，因此先用 -1 占位
 	containerInfo, err := container.CreateContainerInfoByName(containerName, -1, command, volume)

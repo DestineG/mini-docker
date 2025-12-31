@@ -258,3 +258,8 @@ root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker#
 - 容器根文件系统分开管理
 - 创建容器时 保证 containerName 的唯一性
 - 命令行参数重置，将 containerId 参数换为 containerName
+
+### 5.8 添加 环境变量参数 -e & 更新 exec 子命令
+
+- 在 run 子命令中添加了参数 e 的解析
+- exec 子命令在容器内产生的进程不知为何没有继承 init 进程(容器的根进程)的环境变量，所以在 cmd 中添加了缺失的环境变量(`ExecContainer() -> cmd.Env = finalEnv`)
