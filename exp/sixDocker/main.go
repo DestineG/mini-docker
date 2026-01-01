@@ -30,6 +30,7 @@ func main() {
 		stopCpmmand,
 		removeCommand,
 		ShowAllImagesCommand,
+		networkCommand,
 	}
 
 	// cli全局配置

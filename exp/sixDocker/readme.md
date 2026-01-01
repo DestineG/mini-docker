@@ -281,3 +281,77 @@ INFO[0000] main - os.Args: [./sixDocker exec si env]
 luck=bird
 root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
 ```
+
+### 6.5 实现 docker network
+
+#### 实现 docker network 的 create list remove 子命令
+
+``` bash
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker network create -driver bridge -subnet 172.18.0.0/16 docker0
+INFO[0000] main - os.Args: [./sixDocker network create -driver bridge -subnet 172.18.0.0/16 docker0] 
+INFO[0000] Init network success!                        
+INFO[0000] Create network docker0 with driver bridge and subnet 172.18.0.0/16 
+INFO[0000] Successfully added iptables NAT rule for network docker0 
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker network list
+INFO[0000] main - os.Args: [./sixDocker network list]   
+INFO[0000] Init network success!                        
+NAME        IP RANGE        DRIVER
+docker0     172.18.0.3/16   bridge
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker network remove docker0
+INFO[0000] main - os.Args: [./sixDocker network remove docker0] 
+INFO[0000] Init network success!                        
+INFO[0000] Successfully removed iptables NAT rule for network docker0 
+INFO[0000] Delete network success!                      
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker network list
+INFO[0000] main - os.Args: [./sixDocker network list]   
+INFO[0000] Init network success!                        
+NAME        IP RANGE    DRIVER
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
+```
+
+#### 实现 docker run 的 network, p 命令行参数
+
+``` bash
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker network create -driver bridge -subnet 172.18.0.0/16 docker0
+INFO[0000] main - os.Args: [./sixDocker network create -driver bridge -subnet 172.18.0.0/16 docker0] 
+INFO[0000] Init network success!                        
+INFO[0000] Create network docker0 with driver bridge and subnet 172.18.0.0/16 
+INFO[0000] Successfully added iptables NAT rule for network docker0 
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker run -d -name si -network docker0 -p 3000:3001 -- top
+INFO[0000] main - os.Args: [./sixDocker run -d -name si -network docker0 -p 3000:3001 -- top] 
+INFO[0000] Creating container info for si               
+INFO[0000] Creating workspace for container si          
+INFO[0000] ReadOnlyLayer for busybox already exists at /var/run/sixDocker/readOnlyLayer/busybox 
+INFO[0000] Creating mount point at /workspace/projects/go/dockerDev/run/containers/si/mnt 
+INFO[0000] ReadOnlyLayer: /var/run/sixDocker/readOnlyLayer/busybox, WriterLayer: /workspace/projects/go/dockerDev/run/containers/si/ufs/writeLayer 
+INFO[0000] Container si PID 314225                      
+INFO[0000] Init network success!                        
+INFO[0000] Connect network docker0 success              
+INFO[0000] parent writePipe &{0xc0000f62a0}             
+INFO[0000] command all is top                           
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker exec si sh
+INFO[0000] main - os.Args: [./sixDocker exec si sh]     
+INFO[0000] container pid 314225                         
+INFO[0000] exec command sh                              
+/ # ping -c 4 8.8.8.8
+PING 8.8.8.8 (8.8.8.8): 56 data bytes
+64 bytes from 8.8.8.8: seq=0 ttl=109 time=24.883 ms
+64 bytes from 8.8.8.8: seq=1 ttl=109 time=24.627 ms
+64 bytes from 8.8.8.8: seq=2 ttl=109 time=24.486 ms
+64 bytes from 8.8.8.8: seq=3 ttl=109 time=24.662 ms
+
+--- 8.8.8.8 ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max = 24.486/24.664/24.883 ms
+/ # exit
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# iptables -t nat -vnL PREROUTING --line-numbers
+Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+num   pkts bytes target     prot opt in     out     source               destination         
+1        0     0 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:3000 to:172.18.0.13:3001
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
+```
+
+#### 问题
+
+- network 中 Disconnect() 的实现
+- 容器删除时 ipam 的地址回收

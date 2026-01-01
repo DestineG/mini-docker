@@ -9,13 +9,17 @@ import (
 	"sixDocker/cgroups"
 	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
+	"sixDocker/network"
 	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
 
-func Run(resConf *subsystems.ResourceConfig, tty bool, volume []string, containerName string, envSlice []string, command []string) {
+func Run(
+	resConf *subsystems.ResourceConfig, tty bool,
+	volume []string, containerName string, envSlice []string,
+	nw string, portMapping []string, command []string) {
 	// 准备容器的根进程 使用当前可执行文件 + init 进行启动
 	// 返回父进程对象和用于和子进程通信的管道
 	parent, writePipe := container.NewParentProcess()
@@ -34,7 +38,7 @@ func Run(resConf *subsystems.ResourceConfig, tty bool, volume []string, containe
 	parent.Env = append(os.Environ(), envSlice...)
 
 	// 生成容器 config，pid 只能在 Start 之后才能获取到，因此先用 -1 占位
-	containerInfo, err := container.CreateContainerInfoByName(containerName, -1, command, volume)
+	containerInfo, err := container.CreateContainerInfoByName(containerName, -1, command, volume, portMapping)
 	if err != nil {
 		log.Errorf("Create container info error: %v", err)
 		return
@@ -104,6 +108,16 @@ func Run(resConf *subsystems.ResourceConfig, tty bool, volume []string, containe
 		log.Errorf("Apply cgroup error: %v", err)
 		return
 	}
+	// 网络设置
+	if nw != "" {
+		network.Init()
+		if err := network.Connect(nw, containerInfo); err != nil {
+			log.Errorf("Connect network error: %v", err)
+			return
+		}
+		log.Infof("Connect network %s success", nw)
+	}
+
 	// 通过管道传递初始化容器进程要执行的命令
 	log.Infof("parent writePipe %v", writePipe)
 	// 子进程接收到数据后会从管道中读取命令并执行

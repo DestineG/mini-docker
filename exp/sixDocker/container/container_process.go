@@ -39,6 +39,7 @@ type ContainerInfo struct {
 	CreatedTime string   `json:"createdTime"` // 容器创建时间
 	Status      string   `json:"status"`      // 容器状态
 	Volume      []string `json:"volume"`      // 容器挂载的卷
+	PortMapping []string `json:"portmapping"` // 容器端口映射
 }
 
 func NewParentProcess() (*exec.Cmd, *os.File) {
@@ -332,6 +333,7 @@ func ListContainers() {
 		log.Errorf("Read dir %s error: %v", dirURL, err)
 		return
 	}
+
 	var containers []ContainerInfo
 	for _, file := range files {
 		containerDir := path.Join(dirURL, file.Name())
@@ -348,10 +350,16 @@ func ListContainers() {
 		}
 		containers = append(containers, containerInfo)
 	}
+
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Name", "PID", "Command", "CreatedTime", "Status"})
+	table.SetHeader([]string{"ID", "Name", "PID", "Command", "CreatedTime", "Status", "PORTS"})
 
 	for _, container := range containers {
+		portStr := strings.Join(container.PortMapping, ",")
+		if portStr == "" {
+			portStr = "-"
+		}
+
 		table.Append([]string{
 			container.Id,
 			container.Name,
@@ -359,6 +367,7 @@ func ListContainers() {
 			container.Command,
 			container.CreatedTime,
 			container.Status,
+			portStr,
 		})
 	}
 	table.Render()
@@ -448,7 +457,7 @@ func GetContainerInfoByName(containerName string) (*ContainerInfo, error) {
 	return &containerInfo, nil
 }
 
-func CreateContainerInfoByName(containerName string, pid int, commandArray []string, volume []string) (*ContainerInfo, error) {
+func CreateContainerInfoByName(containerName string, pid int, commandArray []string, volume []string, portMapping []string) (*ContainerInfo, error) {
 	containerId := randStringBytes(10)
 	if containerName == "" {
 		containerName = containerId
@@ -467,6 +476,7 @@ func CreateContainerInfoByName(containerName string, pid int, commandArray []str
 		CreatedTime: CreatedTime,
 		Status:      RUNNING,
 		Volume:      volume,
+		PortMapping: portMapping,
 	}
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {

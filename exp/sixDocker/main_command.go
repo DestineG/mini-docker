@@ -7,6 +7,7 @@ import (
 	"os"
 	"sixDocker/cgroups/subsystems"
 	"sixDocker/container"
+	"sixDocker/network"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -52,6 +53,15 @@ var runCommand = cli.Command{
 			Name:  "e",
 			Usage: "environment variables",
 		},
+		cli.StringFlag{
+			Name:  "network",
+			Usage: "container network",
+			Value: "bridge",
+		},
+		cli.StringSliceFlag{
+			Name:  "p",
+			Usage: "port mapping",
+		},
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
@@ -83,7 +93,11 @@ var runCommand = cli.Command{
 		envSlice := context.StringSlice("e")
 		// 获取 挂载卷
 		volume := context.StringSlice("v")
-		Run(resConf, tty, volume, containerName, envSlice, cmdArray)
+		// 容器网络
+		networkName := context.String("network")
+		// 端口映射
+		portMapping := context.StringSlice("p")
+		Run(resConf, tty, volume, containerName, envSlice, networkName, portMapping, cmdArray)
 		return nil
 	},
 }
@@ -201,5 +215,68 @@ var ShowAllImagesCommand = cli.Command{
 	Usage: "List all the images",
 	Action: func(context *cli.Context) error {
 		return container.ShowAllImages()
+	},
+}
+
+var networkCommand = cli.Command{
+	Name:  "network",
+	Usage: "container network commands",
+	Subcommands: []cli.Command{
+		{
+			Name: "create",
+			Usage: `Create a container network
+			./sixDocker network create -driver bridge -subnet 172.18.0.0/16 docker0
+			./sixDocker run -d -name si -network docker0 -- top`,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "driver",
+					Usage: "Network driver",
+					Value: "bridge",
+				},
+				cli.StringFlag{
+					Name:  "subnet",
+					Usage: "Subnet CIDR",
+				},
+			},
+			Action: func(context *cli.Context) error {
+				if len(context.Args()) < 1 {
+					return fmt.Errorf("missing network name")
+				}
+				if err := network.Init(); err != nil {
+					return err
+				}
+				nwName := context.Args().Get(0)
+				driver := context.String("driver")
+				subnet := context.String("subnet")
+				return network.CreateNetwork(driver, subnet, nwName)
+			},
+		},
+		{
+			Name: "list",
+			Usage: `List all container networks
+					./sixDocker network list`,
+			Action: func(context *cli.Context) error {
+				if err := network.Init(); err != nil {
+					return err
+				}
+				network.ListNetwork()
+				return nil
+			},
+		},
+		{
+			Name: "remove",
+			Usage: `Delete a container network
+					./sixDocker network remove [networkName]`,
+			Action: func(context *cli.Context) error {
+				if len(context.Args()) < 1 {
+					return fmt.Errorf("missing network name")
+				}
+				if err := network.Init(); err != nil {
+					return err
+				}
+				nwName := context.Args().Get(0)
+				return network.DeleteNetwork(nwName)
+			},
+		},
 	},
 }
