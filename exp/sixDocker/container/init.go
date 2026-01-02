@@ -3,12 +3,12 @@
 package container
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
-	"strings"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
@@ -38,18 +38,24 @@ func RunContainerInitProcess() error {
 	return nil
 }
 
+// 在NewParentProcess中将pipe的读端设置为3号文件描述符
+// 在init进程中通过3号文件描述符获取管道读端, 设置pipe的Name为pipe
+// 等待父进程通过管道写入命令(阻塞) 也就是sendInitCommand函数的执行
 func readUserCommand() []string {
-	// 在NewParentProcess中将pipe的读端设置为3号文件描述符
-	// 在init进程中通过3号文件描述符获取管道读端, 设置pipe的Name为pipe
 	pipe := os.NewFile(uintptr(3), "pipe")
-	// 等待父进程通过管道写入命令(阻塞) 也就是sendInitCommand函数的执行
 	msg, err := ioutil.ReadAll(pipe)
 	if err != nil {
 		log.Errorf("init read pipe error %v", err)
 		return nil
 	}
-	msgStr := string(msg)
-	return strings.Split(msgStr, " ")
+
+	var cmdArray []string
+	// 将读取到的 JSON 数据还原为 []string 切片
+	if err := json.Unmarshal(msg, &cmdArray); err != nil {
+		log.Errorf("Unmarshal command error: %v", err)
+		return nil
+	}
+	return cmdArray
 }
 
 // 将当前工作目录作为新的根文件系统 并挂载proc文件系统
@@ -65,21 +71,40 @@ func setUpMount() {
 		return
 	}
 
-	// proc 文件系统和 namespace 密切相关 每个 namespace 都有自己独立的 proc 文件系统
-	// 切换新的根文件系统后需要在它上面挂载 proc 文件系统
-	// 挂载 proc 文件系统
+	// 挂载 proc
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 	if err := syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), ""); err != nil {
-		log.Errorf("Mount proc file system error: %v", err)
+		log.Errorf("Mount proc error: %v", err)
 		return
 	}
 
-	// 为新 rootfs 提供可用的 /dev：
-	// 挂载 tmpfs 以存放容器所需的最小设备节点(如 /dev/null、/dev/tty)
+	// 挂载 tmpfs 到 /dev
 	if err := syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755"); err != nil {
 		log.Errorf("Mount tmpfs to /dev error: %v", err)
 		return
 	}
+
+	// 关键：手动创建设备节点
+	// 必须要手动创建 /dev/null，否则 Nginx 等程序无法启动
+	// 参数说明: 路径, 权限|字符设备类型, 设备号(通过 makedev 计算)
+	// /dev/null 的主设备号是 1, 次设备号是 3
+	if err := syscall.Mknod("/dev/null", 0666|syscall.S_IFCHR, int(makedev(1, 3))); err != nil {
+		log.Errorf("Mknod /dev/null error: %v", err)
+	}
+
+	// 建议顺便把 /dev/zero 也建了，很多程序需要它 (1, 5)
+	if err := syscall.Mknod("/dev/zero", 0666|syscall.S_IFCHR, int(makedev(1, 5))); err != nil {
+		log.Errorf("Mknod /dev/zero error: %v", err)
+	}
+}
+
+// 辅助函数：计算 Linux 设备号
+func makedev(major, minor uint32) uint64 {
+	// 先转 uint64，再位移
+	return uint64(minor&0xff) |
+		uint64((major&0xfff)<<8) |
+		uint64(minor&^0xff)<<12 |
+		uint64(major&^0xfff)<<32
 }
 
 func pivotRoot(root string) error {

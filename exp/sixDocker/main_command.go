@@ -62,6 +62,11 @@ var runCommand = cli.Command{
 			Name:  "p",
 			Usage: "port mapping",
 		},
+		cli.StringFlag{
+			Name:  "image",
+			Usage: "container image",
+			Value: "busybox",
+		},
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
@@ -73,10 +78,8 @@ var runCommand = cli.Command{
 		if len(args) == 0 {
 			return fmt.Errorf("missing container command")
 		}
-		var cmdArray []string
-		for _, arg := range context.Args() {
-			cmdArray = append(cmdArray, arg)
-		}
+		cmdArray := []string(args)
+
 		tty := context.Bool("ti")
 		d := context.Bool("d")
 		if tty && d {
@@ -97,7 +100,9 @@ var runCommand = cli.Command{
 		networkName := context.String("network")
 		// 端口映射
 		portMapping := context.StringSlice("p")
-		Run(resConf, tty, volume, containerName, envSlice, networkName, portMapping, cmdArray)
+		// 镜像名称
+		imageName := context.String("image")
+		Run(resConf, tty, volume, containerName, envSlice, networkName, portMapping, imageName, cmdArray)
 		return nil
 	},
 }

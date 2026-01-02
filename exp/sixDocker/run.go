@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -11,7 +12,6 @@ import (
 	"sixDocker/container"
 	"sixDocker/network"
 	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -19,7 +19,7 @@ import (
 func Run(
 	resConf *subsystems.ResourceConfig, tty bool,
 	volume []string, containerName string, envSlice []string,
-	nw string, portMapping []string, command []string) {
+	nw string, portMapping []string, imageName string, command []string) {
 	// 准备容器的根进程 使用当前可执行文件 + init 进行启动
 	// 返回父进程对象和用于和子进程通信的管道
 	parent, writePipe := container.NewParentProcess()
@@ -45,7 +45,7 @@ func Run(
 	}
 
 	// ufs 创建
-	mntURL, err := container.NewWorkSpace(containerInfo.Name, "busybox", volume)
+	mntURL, err := container.NewWorkSpace(containerInfo.Name, imageName, volume)
 	if err != nil {
 		log.Errorf("New workspace error: %v", err)
 		return
@@ -139,8 +139,13 @@ func Run(
 }
 
 func sendInitCommand(comArray []string, writePipe *os.File) {
-	command := strings.Join(comArray, " ")
-	log.Infof("command all is %s", command)
-	writePipe.WriteString(command)
+	// 使用 JSON 序列化，保留切片中每个元素的完整性（包括空格和引号）
+	jsonBytes, err := json.Marshal(comArray)
+	if err != nil {
+		log.Errorf("Marshal command error: %v", err)
+		return
+	}
+	log.Infof("command all is %s", string(jsonBytes))
+	writePipe.Write(jsonBytes)
 	writePipe.Close()
 }

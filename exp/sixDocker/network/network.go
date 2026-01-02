@@ -302,6 +302,12 @@ func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInf
 	if err := setInterfaceUP(ep.Device.PeerName); err != nil {
 		return fmt.Errorf("set interface %s up error: %v", ep.Device.PeerName, err)
 	}
+	log.Infof("Set interface %s up with ip %s success", ep.Device.PeerName, interfaceIP.String())
+
+	// 启动回环接口
+	if err := setInterfaceUP("lo"); err != nil {
+		return fmt.Errorf("set interface lo up error: %v", err)
+	}
 
 	// 配置容器的默认路由
 	_, cidr, _ := net.ParseCIDR("0.0.0.0/0")

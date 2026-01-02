@@ -355,3 +355,49 @@ root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker#
 
 - network 中 Disconnect() 的实现
 - 容器删除时 ipam 的地址回收
+- 删除容器时 veth 未清除，如果遇到新容器的 veth 和未清除 veth 同名，则可能会出现报错
+- 非前台模式下的容器资源回收
+
+### 测试使用 nginx 镜像
+
+#### 功能
+- 添加 run 子命令 image 命令行参数
+- configEndpointIpAddressAndRoute() 添加对回环地址的拉起操作
+- 增强 run/exec 子命令对命令参数的解析
+
+#### 测试
+
+``` bash
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# ./sixDocker run -name test_nginx -network docker0 -p 80:80 -d -image nginx -- nginx -g 'daemon off;'
+INFO[0000] main - os.Args: [./sixDocker run -name test_nginx -network docker0 -p 80:80 -d -image nginx -- nginx -g daemon off;] 
+INFO[0000] Creating container info for test_nginx       
+INFO[0000] Creating workspace for container test_nginx  
+INFO[0000] ReadOnlyLayer for nginx already exists at /var/run/sixDocker/readOnlyLayer/nginx 
+INFO[0000] Creating mount point at /workspace/projects/go/dockerDev/run/containers/test_nginx/mnt 
+INFO[0000] ReadOnlyLayer: /var/run/sixDocker/readOnlyLayer/nginx, WriterLayer: /workspace/projects/go/dockerDev/run/containers/test_nginx/ufs/writeLayer 
+INFO[0000] Container test_nginx PID 339422              
+INFO[0000] Init network success!                        
+INFO[0000] Set interface cif-02563 up with ip 172.18.0.38/16 success 
+INFO[0000] Connect network docker0 success              
+INFO[0000] parent writePipe &{0xc0000f62a0}             
+INFO[0000] command all is ["nginx","-g","daemon off;"]  
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# curl -I http://172.18.0.38:80
+HTTP/1.1 200 OK
+Server: nginx/1.29.4
+Date: Fri, 02 Jan 2026 01:38:16 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Tue, 09 Dec 2025 18:28:10 GMT
+Connection: keep-alive
+ETag: "69386a3a-267"
+Accept-Ranges: bytes
+
+root@78c966f22b74:/workspace/projects/go/dockerDev/exp/sixDocker# 
+```
+
+#### 问题
+
+这条命令后输入 ctrl + c 会直接 kill nginx 进程和它的父进程不会执行 Run() -> if tty 中的资源回收
+``` bash
+./sixDocker run -name test_nginx -network docker0 -p 80:80 -ti -image nginx -- nginx -g 'daemon off;'
+```

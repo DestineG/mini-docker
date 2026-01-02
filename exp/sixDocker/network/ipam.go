@@ -89,23 +89,32 @@ func (ipam *IPAM) Allocate(subnet *net.IPNet) (ip net.IP, err error) {
 	one, size := subnet.Mask.Size()
 
 	if _, exist := ipam.Subnets[subnet.String()]; !exist {
+		// 计算子网可用IP数量并初始化分配位图，每个字符代表一个IP地址，'0'表示未分配，'1'表示已分配
 		ipam.Subnets[subnet.String()] = strings.Repeat("0", 1<<uint8(size-one))
 	}
 
 	// 标记分配第一个可用 IP 地址
 	for c := range ipam.Subnets[subnet.String()] {
 		if ipam.Subnets[subnet.String()][c] == '0' {
+			// 将 string 转为 rune 切片以便修改指定位置的字符
 			ipalloc := []rune(ipam.Subnets[subnet.String()])
+
+			// 标记该 IP 已分配
 			ipalloc[c] = '1'
+
+			// 更新分配位图信息
 			ipam.Subnets[subnet.String()] = string(ipalloc)
 
-			// 计算分配的 IP 地址
+			// type(net.IP) = []byte, ip = [len(subnet.IP)]byte
 			ip = make(net.IP, len(subnet.IP))
 			copy(ip, subnet.IP)
 
 			for t := uint(4); t > 0; t-- {
+				// 先位移将要取的字节移到最低位，然后用 uint8 截取最低位加到对应的 ip 字节上
 				ip[4-t] += uint8(c >> ((t - 1) * 8))
 			}
+
+			// 跳过 *.*.*.0 地址
 			ip[3] += 1
 			break
 		}
@@ -127,6 +136,7 @@ func (ipam *IPAM) Release(subnet *net.IPNet, ip *net.IP) error {
 
 	_, subnet, _ = net.ParseCIDR(subnet.String())
 
+	// 计算释放的 IP 地址在位图中的索引，偏移 = (待释放 ip - subnet.IP) - 1
 	c := 0
 	releaseIP := ip.To4()
 	releaseIP[3] -= 1
